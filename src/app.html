@@ -815,18 +815,20 @@ button.rs:hover .rsn{color:var(--ink)}
       if(isSel || isTop) e.mk.bringToFront();
     });
   }
+  var lastFix = null;   // most recent GPS position, kept on the map after the user pans away
   function drawMe(){
     meLayer.clearLayers();
     crossEl.hidden = origin.live;
-    if(!origin.live) return;
-    if(origin.acc){
-      L.circle([origin.lat, origin.lng], {
-        radius:origin.acc, color:tok("--near"), weight:1,
+    var me = origin.live ? origin : lastFix;
+    if(!me) return;
+    if(origin.live && me.acc){
+      L.circle([me.lat, me.lng], {
+        radius:me.acc, color:tok("--near"), weight:1,
         fillColor:tok("--near"), fillOpacity:.08, interactive:false
       }).addTo(meLayer);
     }
-    L.circleMarker([origin.lat, origin.lng], {
-      radius:7, fillColor:tok("--near"), fillOpacity:1,
+    L.circleMarker([me.lat, me.lng], {
+      radius:7, fillColor:tok("--near"), fillOpacity: origin.live ? 1 : .5,
       color:tok("--surface"), weight:3, interactive:false
     }).addTo(meLayer);
   }
@@ -1083,7 +1085,7 @@ button.rs:hover .rsn{color:var(--ink)}
     drawRoute();
     if(g){
       renderDetail(g);
-      if(pan) map.panTo([g.lat, g.lng], { animate:true, duration:.4 });
+      if(pan){ ownMove(); map.panTo([g.lat, g.lng], { animate:true, duration:.4 }); }
     } else {
       renderList();
     }
@@ -1116,11 +1118,21 @@ button.rs:hover .rsn{color:var(--ink)}
     origin = { lat:c.lat, lng:c.lng, label: label || "地圖中心", live:false };
     refresh();
   }
+  // Distances follow the map whenever the user moves it (drag, pinch, keys), including
+  // after a GPS fix; 「定位」 brings them back. Moves the page makes itself (centring on a
+  // fix, a search result or a selected stop) must not take over the reference point.
+  var ownMoveUntil = 0, toldAboutCentre = false;
+  function ownMove(){ ownMoveUntil = Date.now() + 1500; }
   map.on("moveend", function(){
-    if(origin.live) return;
+    if(Date.now() < ownMoveUntil) return;
     var c = map.getCenter();
     if(haversine(origin.lat, origin.lng, c.lat, c.lng) < 25) return;
+    var wasLive = origin.live;
     setCentreOrigin("地圖中心");
+    if(wasLive && !toldAboutCentre){
+      toldAboutCentre = true;
+      toast("距離改從畫面中心起算；按右下角「定位」回到你的位置");
+    }
   });
 
   /* ---------- geolocation, with an honest diagnosis ---------- */
@@ -1149,8 +1161,9 @@ button.rs:hover .rsn{color:var(--ink)}
       locBtn.classList.remove("dead");
       var la = pos.coords.latitude, ln = pos.coords.longitude;
       origin = { lat:la, lng:ln, label:"目前位置", live:true, acc:pos.coords.accuracy };
+      lastFix = { lat:la, lng:ln, acc:pos.coords.accuracy };
       refresh();
-      map.setView([la, ln], 17);
+      ownMove(); map.setView([la, ln], 17);
       toast(bounds.contains([la, ln])
         ? "定位完成，精度約 ±" + Math.round(pos.coords.accuracy) + " 公尺"
         : "你目前不在台北市範圍內，以下是離你最近的點");
@@ -1261,10 +1274,10 @@ button.rs:hover .rsn{color:var(--ink)}
       b.addEventListener("click", function(){
         closeSearch();
         if(it.kind === "stop"){
-          map.setView([it.lat, it.lng], 18);
+          ownMove(); map.setView([it.lat, it.lng], 18);
           select(it.g, false);
         } else {
-          map.setView([it.lat, it.lng], 17.5);
+          ownMove(); map.setView([it.lat, it.lng], 17.5);
           origin = { lat:it.lat, lng:it.lng, label:it.name, live:false };
           if(selected) select(null, false); else refresh();
           toast("距離改從「"+it.name+"」起算");
