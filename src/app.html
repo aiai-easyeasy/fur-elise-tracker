@@ -1,0 +1,1338 @@
+<title>垃圾車在哪</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/*__LEAFLET_CSS__*/
+</style>
+<style>
+:root{
+  --ground:#FAF7F1;
+  --surface:#FFFFFF;
+  --surface-2:#F3EEE4;
+  --ink:#1C1A16;
+  --ink-2:#5E584C;
+  --ink-3:#8C8577;
+  --line:#E4DCCC;
+  --line-soft:#EFE8DB;
+  --accent:#B87C08;
+  --accent-ink:#7A5205;
+  --accent-soft:#FAF0D6;
+  --near:#2E7361;
+  --near-soft:#DDEFE9;
+  --warn:#A8442A;
+  --warn-soft:#F9E5DE;
+  --rest-bg:#A8442A;
+  --rest-ink:#FFF6F1;
+  --rest-sub:#F3CDBF;
+  --map-bg:#EAE3D4;
+  --road-major:#FFFFFF;
+  --road-mid:#FDFAF3;
+  --road-minor:#F6F1E6;
+  --road-alley:#F0EADC;
+  --road-foot:#DED5C2;
+  --label:#5E584C;
+  --label-halo:#EAE3D4;
+  --dot:#8A8272;
+  --shadow:0 2px 10px rgba(28,26,22,.10);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#141310; --surface:#1D1B16; --surface-2:#26241C;
+    --ink:#F1ECE1; --ink-2:#AEA694; --ink-3:#7F7767;
+    --line:#312E25; --line-soft:#262319;
+    --accent:#F0B93C; --accent-ink:#F5CE74; --accent-soft:#382C10;
+    --near:#63C4A7; --near-soft:#15332B;
+    --warn:#E8927A; --warn-soft:#3A211A;
+    --rest-bg:#5A2A1D; --rest-ink:#FFE7DD; --rest-sub:#EDB3A0;
+    --map-bg:#15130F; --road-major:#756B55; --road-mid:#574F3E;
+    --road-minor:#3E3930; --road-alley:#332F27; --road-foot:#2A2720;
+    --label:#CFC6B1; --label-halo:#15130F; --dot:#6E6758;
+    --shadow:0 2px 12px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#141310; --surface:#1D1B16; --surface-2:#26241C;
+  --ink:#F1ECE1; --ink-2:#AEA694; --ink-3:#7F7767;
+  --line:#312E25; --line-soft:#262319;
+  --accent:#F0B93C; --accent-ink:#F5CE74; --accent-soft:#382C10;
+  --near:#63C4A7; --near-soft:#15332B;
+  --warn:#E8927A; --warn-soft:#3A211A;
+    --rest-bg:#5A2A1D; --rest-ink:#FFE7DD; --rest-sub:#EDB3A0;
+  --map-bg:#15130F; --road-major:#756B55; --road-mid:#574F3E;
+  --road-minor:#3E3930; --road-alley:#332F27; --road-foot:#2A2720;
+  --label:#CFC6B1; --label-halo:#15130F; --dot:#6E6758;
+  --shadow:0 2px 12px rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;overscroll-behavior:none;
+}
+.app{
+  height:100dvh;max-width:520px;margin:0 auto;
+  display:grid;grid-template-rows:auto 1fr auto;
+  background:var(--ground);box-shadow:0 0 0 1px var(--line);
+}
+
+.top{
+  position:relative;z-index:1000;
+  background:var(--surface);border-bottom:1px solid var(--line);
+  height:54px;padding:0 8px 0 16px;display:flex;align-items:center;gap:10px;
+}
+.qopen{
+  flex:none;width:40px;height:40px;border-radius:10px;border:0;background:none;padding:0;
+  color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.qopen:hover{background:var(--surface-2);color:var(--ink)}
+.qopen:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.top.searching .mark,.top.searching .scope,.top.searching .qopen,.top.searching .restpill{display:none}
+.restpill{
+  flex:none;border:0;cursor:pointer;font-family:inherit;
+  font-size:11.5px;font-weight:700;letter-spacing:.04em;line-height:1;
+  color:var(--rest-ink);background:var(--rest-bg);padding:6px 9px;border-radius:999px;
+}
+.restpill[hidden]{display:none}
+.restpill:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mark{font-weight:900;font-size:17px;display:flex;align-items:center;gap:8px}
+.mark::before{
+  content:"";width:9px;height:9px;border-radius:2px;background:var(--accent);
+  flex:none;box-shadow:0 0 0 3px var(--accent-soft);
+}
+.scope{font-size:11px;color:var(--ink-3);font-weight:500;letter-spacing:.05em;margin-left:auto}
+
+
+/* ---------- search ---------- */
+.searchwrap{flex:1;min-width:0;display:flex;align-items:center;gap:4px}
+.searchwrap[hidden]{display:none}
+.searchbar{flex:1;min-width:0;height:38px;display:flex;align-items:center;gap:8px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:0 10px}
+.searchbar:focus-within{border-color:var(--accent)}
+.searchbar svg{flex:none;opacity:.5}
+#q{
+  flex:1;min-width:0;height:100%;border:0;background:none;outline:none;
+  font-family:inherit;font-size:16px;color:var(--ink);padding:0;
+}
+#q::placeholder{color:var(--ink-3)}
+#qClear{
+  flex:none;width:38px;height:38px;border:0;border-radius:9px;background:none;padding:0;
+  color:var(--ink-3);font-size:22px;line-height:1;cursor:pointer;font-family:var(--mono);
+}
+#qClear:hover{background:var(--surface-2);color:var(--ink)}
+#qClear:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.suggest{
+  position:absolute;left:12px;right:12px;top:calc(100% + 6px);
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow);overflow:hidden;max-height:54dvh;overflow-y:auto;
+}
+.suggest[hidden]{display:none}
+.sg{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:9px 12px;border:0;border-bottom:1px solid var(--line-soft);
+  background:none;font-family:inherit;font-size:13.5px;color:var(--ink);cursor:pointer;
+}
+.sg:last-child{border-bottom:0}
+.sg:hover,.sg:focus-visible{background:var(--surface-2);outline:none}
+.sg .kind{
+  font-size:10px;font-weight:700;letter-spacing:.05em;flex:none;
+  padding:1px 6px;border-radius:4px;background:var(--surface-2);
+  color:var(--ink-3);border:1px solid var(--line);
+}
+.sg .kind.stop{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.sg .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg .far{font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:none}
+.sgempty{padding:12px;font-size:12.5px;color:var(--ink-3);text-align:center}
+
+/* ---------- rest day (Wed / Sun): impossible to miss ---------- */
+.restday{
+  position:fixed;inset:0;z-index:2000;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  background:rgba(20,18,14,.62);
+}
+.restday[hidden]{display:none}
+.restcard{
+  width:100%;max-width:400px;border-radius:22px;
+  background:var(--rest-bg);color:var(--rest-ink);
+  padding:30px 24px 24px;text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.4);
+}
+.restwhen{font-size:15px;font-weight:700;letter-spacing:.12em;color:var(--rest-sub)}
+.resttitle{
+  margin:8px 0 16px;font-size:clamp(64px,21vw,96px);font-weight:900;
+  line-height:1.02;letter-spacing:.02em;
+}
+.restdesc{margin:0 auto;max-width:26ch;font-size:15px;line-height:1.65}
+.restnote{margin:10px auto 0;max-width:28ch;font-size:12.5px;line-height:1.6;color:var(--rest-sub)}
+.restbtn{
+  margin-top:22px;border:0;border-radius:999px;cursor:pointer;
+  background:var(--rest-ink);color:var(--rest-bg);
+  font-family:inherit;font-size:15px;font-weight:700;padding:12px 24px;
+}
+.restbtn:focus-visible{outline:3px solid var(--rest-ink);outline-offset:3px}
+
+/* ---------- map ---------- */
+.maparea{position:relative;min-height:0;background:var(--map-bg);overflow:hidden}
+#map{position:absolute;inset:0;background:var(--map-bg)}
+/* width/height must be explicit: an absolutely positioned <canvas> with only
+   inset:0 takes its INTRINSIC (attribute) size, which feeds back into the
+   bitmap sizing and doubles the element on every resize. */
+#labels{position:absolute;left:0;top:0;width:100%;height:100%;
+  pointer-events:none;z-index:410}
+.leaflet-container{background:var(--map-bg);font-family:var(--sans);outline:none}
+.leaflet-container a{color:var(--accent-ink)}
+
+.cross{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:34px;height:34px;z-index:420;pointer-events:none;
+}
+.cross::before,.cross::after{content:"";position:absolute;background:var(--ink-3);opacity:.55}
+.cross::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
+.cross::after{top:50%;left:0;height:1px;width:100%;transform:translateY(-50%)}
+.cross span{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:13px;height:13px;border-radius:50%;
+  border:2px solid var(--ink-3);background:var(--surface);
+}
+.cross[hidden]{display:none}
+
+.mapctl{position:absolute;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
+.mapctl.zoom{top:12px}
+.mapctl.act{bottom:12px}
+.iconbtn{
+  width:40px;height:40px;border-radius:10px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  font-family:var(--mono);font-size:18px;font-weight:600;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--shadow);cursor:pointer;padding:0;
+}
+.iconbtn:hover{border-color:var(--ink-3)}
+.iconbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.iconbtn.primary{
+  background:var(--accent);border-color:var(--accent);color:#1C1A16;
+  font-size:15px;font-family:var(--sans);font-weight:700;
+}
+.iconbtn.small{font-family:var(--sans);font-size:12px;font-weight:700}
+.iconbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.iconbtn.dead{
+  background:var(--surface);border-color:var(--line);color:var(--ink-3);
+  font-weight:500;
+}
+
+.legend{
+  position:absolute;left:12px;bottom:12px;z-index:500;
+  background:var(--surface);border:1px solid var(--line);border-radius:9px;
+  padding:8px 10px;box-shadow:var(--shadow);
+  font-size:10.5px;line-height:1.7;color:var(--ink-3);max-width:54%;
+}
+.legend .row{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.legend i{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.legend .src{margin-top:5px;padding-top:5px;border-top:1px solid var(--line-soft);font-size:9.5px}
+.legend .src a{color:var(--ink-3)}
+
+.toast{
+  position:absolute;left:50%;transform:translateX(-50%);top:12px;z-index:600;
+  background:var(--ink);color:var(--ground);
+  font-size:12.5px;padding:9px 14px;border-radius:14px;
+  box-shadow:var(--shadow);max-width:84%;text-align:left;line-height:1.5;
+}
+.toast[hidden]{display:none}
+
+/* ---------- bottom sheet ---------- */
+.sheet{
+  background:var(--surface);border-top:1px solid var(--line);
+  display:flex;flex-direction:column;min-height:0;
+  height:36dvh;transition:height .22s ease;
+}
+/* keep at least 240px of map so the zoom and action buttons never collide */
+.sheet.tall{height:min(70dvh, calc(100dvh - 54px - 240px))}
+.grip{
+  display:flex;align-items:center;gap:10px;position:relative;
+  padding:12px 16px 8px;border-bottom:1px solid var(--line-soft);
+  cursor:pointer;user-select:none;flex:none;
+}
+.grip::before{
+  content:"";width:34px;height:4px;border-radius:2px;background:var(--line);
+  position:absolute;left:50%;top:4px;transform:translateX(-50%);
+}
+.grip h2{font-size:14px;font-weight:700;margin:0;flex:none;white-space:nowrap}
+.grip .count{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:auto}
+.grip .count.hint{font-family:var(--sans);font-size:11.5px;min-width:0;text-align:right;line-height:1.4}
+.sheetbody{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
+
+
+ol.stops{list-style:none;margin:0;padding:0}
+li.stop{
+  display:grid;grid-template-columns:56px 1fr;gap:0 12px;
+  padding:11px 16px;border-bottom:1px solid var(--line-soft);cursor:pointer;
+}
+li.stop:hover{background:var(--surface-2)}
+li.stop.sel{background:var(--accent-soft)}
+.dist{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:16px;font-weight:600;line-height:1.2;color:var(--ink-2);
+  text-align:right;padding-top:2px;
+}
+.dist small{display:block;font-size:9.5px;font-weight:400;color:var(--ink-3);letter-spacing:.05em}
+li.stop.sel .dist{color:var(--accent-ink)}
+li.stop.near .dist{color:var(--near)}
+.body{min-width:0}
+.name{font-weight:500;line-height:1.4;font-size:14px;word-break:break-word}
+.times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.slot{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;
+  background:var(--surface-2);color:var(--ink);border:1px solid var(--line);
+  display:inline-flex;align-items:center;gap:6px;
+}
+.slot.upcoming{background:var(--near-soft);border-color:transparent;color:var(--near)}
+.slot.past{color:var(--ink-3);background:transparent}
+.slot .when{font-family:var(--sans);font-size:10.5px;font-weight:500}
+.meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.chip{
+  font-size:10.5px;line-height:1.6;padding:1px 7px;border-radius:5px;
+  background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line);
+}
+.chip.route{font-family:var(--mono)}
+
+.detail{padding:14px 16px}
+.backlink{
+  background:none;border:0;padding:0;margin:0 0 10px;
+  font-family:inherit;font-size:12.5px;font-weight:500;color:var(--accent-ink);
+  display:inline-flex;align-items:center;gap:5px;cursor:pointer;
+}
+.backlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.detail h3{margin:0;font-size:17px;font-weight:700;line-height:1.35}
+.detail .sub{
+  font-family:var(--mono);font-size:12px;color:var(--ink-3);margin-top:4px;
+  font-variant-numeric:tabular-nums;
+}
+.detail .times{margin-top:12px}
+.detail .slot{font-size:13px;padding:4px 10px}
+.detail .meta{margin-top:10px}
+.routenote{
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft);
+  font-size:11.5px;color:var(--ink-3);line-height:1.6;
+}
+.routeseq{margin-top:16px;padding-top:12px;border-top:1px solid var(--line-soft)}
+.rshead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.rsmeta{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+ol.rslist{list-style:none;margin:0;padding:0}
+.rs{
+  display:grid;grid-template-columns:42px 12px 1fr auto;align-items:center;gap:0 8px;
+  width:100%;text-align:left;background:none;border:0;padding:5px 2px;margin:0;
+  font-family:inherit;color:var(--ink-2);border-radius:6px;
+}
+button.rs{cursor:pointer}
+button.rs:hover{background:var(--surface-2)}
+button.rs:hover .rsn{color:var(--ink)}
+.rs:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rst{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-3)}
+.rsdot{width:8px;height:8px;border-radius:50%;background:var(--line);justify-self:center}
+.rsn{font-size:13px;line-height:1.4;min-width:0;word-break:break-word}
+.rstag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;
+  background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line);white-space:nowrap}
+.rs.cur{background:var(--accent-soft)}
+.rs.cur .rsn{color:var(--ink);font-weight:700}
+.rs.cur .rst{color:var(--accent-ink)}
+.rs.cur .rsdot{background:var(--accent)}
+.rs.cur .rstag{background:var(--surface);color:var(--accent-ink);border-color:transparent}
+.rs.adj .rsdot{background:var(--near)}
+.rs.adj .rstag{background:var(--near-soft);color:var(--near);border-color:transparent}
+.rs.bad .rsdot{background:var(--warn)}
+.rswarn{grid-column:3 / 5;font-size:10.5px;color:var(--warn);line-height:1.45;margin-top:2px}
+
+.notes{padding:14px 16px 28px;font-size:11.5px;line-height:1.7;color:var(--ink-3);
+  border-top:1px solid var(--line-soft)}
+.notes h4{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 7px}
+.notes ul{margin:0;padding-left:15px}
+.notes li{margin-bottom:4px}
+.notes code{font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important;animation:none!important}
+  .leaflet-fade-anim .leaflet-popup,.leaflet-zoom-anim .leaflet-zoom-animated{transition:none!important}
+}
+</style>
+
+<div class="app">
+
+  <header class="top" id="top">
+    <div class="mark">垃圾車在哪</div>
+    <button class="restpill" id="restPill" type="button" hidden>今日不收運</button>
+    <div class="scope">臺北市</div>
+    <button class="qopen" id="qOpen" type="button" aria-label="搜尋街名、巷弄或收運點" aria-expanded="false" aria-controls="searchwrap">
+      <svg width="19" height="19" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"></circle>
+        <path d="M11 11l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+      </svg>
+    </button>
+    <div class="searchwrap" id="searchwrap" hidden>
+      <div class="searchbar">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"></circle>
+          <path d="M11 11l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+        </svg>
+        <input id="q" type="search" placeholder="搜尋街名、巷弄或收運點…" autocomplete="off" spellcheck="false" enterkeyhint="search">
+      </div>
+      <button id="qClear" type="button" aria-label="關閉搜尋">×</button>
+      <div class="suggest" id="suggest" hidden></div>
+    </div>
+  </header>
+
+  <div class="maparea">
+    <div id="map"></div>
+    <canvas id="labels"></canvas>
+    <div class="cross" id="cross"><span></span></div>
+
+    <div class="mapctl zoom">
+      <button class="iconbtn" id="zoomIn"  aria-label="放大">+</button>
+      <button class="iconbtn" id="zoomOut" aria-label="縮小">−</button>
+    </div>
+    <div class="mapctl act">
+      <button class="iconbtn small" id="routeBtn" aria-label="顯示所選點的路線" title="顯示路線">路線</button>
+      <button class="iconbtn primary" id="locBtn" aria-label="定位到我的位置">定位</button>
+    </div>
+
+    <div class="legend">
+      <div class="row"><i style="background:var(--accent)"></i>最近的收運點</div>
+      <div class="row"><i style="background:var(--near)"></i>500 公尺內</div>
+      <div class="row"><i style="background:var(--dot)"></i>其他收運點</div>
+      <div class="src">街道與路名 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> 貢獻者</div>
+    </div>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+
+  <section class="sheet" id="sheet">
+    <div class="grip" id="grip" role="button" tabindex="0" aria-label="展開或收合清單">
+      <h2 id="sheetTitle">依距離排序</h2>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="sheetbody" id="sheetBody"></div>
+  </section>
+
+  <div class="restday" id="restday" role="alertdialog" aria-modal="true" aria-labelledby="restTitle" aria-describedby="restDesc" hidden>
+    <div class="restcard">
+      <div class="restwhen" id="restWhen">今天不收運</div>
+      <div class="resttitle" id="restTitle">今日<br>不收運</div>
+      <p class="restdesc" id="restDesc">台北市垃圾車每週三、週日停止收運，<span id="restNext">明天照常收運。</span></p>
+      <p class="restnote">下方的地圖與時刻表是平日班次，可以先查好。</p>
+      <button class="restbtn" id="restOk" type="button">知道了，看時刻表</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="data.js"></script>
+<script src="streets.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* 起始中心：通化街19巷6弄15號 */
+  var HOME = { lat:__HOME_LAT__, lng:__HOME_LNG__, label:"通化街19巷6弄" };
+
+  var css = getComputedStyle(document.documentElement);
+  function tok(n){ return css.getPropertyValue(n).trim(); }
+
+  /* ---------- group rows that share a location ---------- */
+  var groups = (function(){
+    var m = Object.create(null), out = [];
+    window.STOPS.forEach(function(s){
+      var key = s.n + "|" + s.g.toFixed(5) + "|" + s.t.toFixed(5);
+      var g = m[key];
+      if(!g){ g = m[key] = { name:s.n, dist:s.d, vil:s.v, lng:s.g, lat:s.t, slots:[] }; out.push(g); }
+      g.slots.push({ a:s.a, e:s.e, route:s.r, car:s.c, plate:s.p, w:s.w });
+    });
+    out.forEach(function(g){ g.slots.sort(function(x,y){ return x.a-y.a; }); });
+    return out;
+  })();
+
+  var routes = (function(){
+    var m = Object.create(null);
+    window.STOPS.forEach(function(s){ (m[s.r+"|"+s.c] || (m[s.r+"|"+s.c] = [])).push(s); });
+    Object.keys(m).forEach(function(k){ m[k].sort(function(x,y){ return x.a-y.a; }); });
+    return m;
+  })();
+
+  var groupIndex = Object.create(null);
+  groups.forEach(function(g){ groupIndex[g.name+"|"+g.lng.toFixed(5)+"|"+g.lat.toFixed(5)] = g; });
+
+  function routeKeys(g){
+    var keys = [];
+    g.slots.forEach(function(s){
+      var k = s.route+"|"+s.car;
+      if(keys.indexOf(k) === -1) keys.push(k);
+    });
+    return keys;
+  }
+
+  // A stop is suspect when it is far from BOTH neighbours while those neighbours
+  // are close to each other — the signature of a misplaced coordinate. One long
+  // hop on its own is not suspect: trucks do relocate between neighbourhoods.
+  var SPIKE_M = 800;
+  var DAY_NAME = ["日","一","二","三","四","五","六"];
+
+  // Some stops only run on certain weekdays (the source writes it into the name,
+  // e.g. 「(週一、週五收運)」). A route's order only makes sense among stops that
+  // run on the same days, so sequences are narrowed to the selected stop's days.
+  function stopDays(g){
+    var set = null;
+    g.slots.forEach(function(sl){
+      if(!sl.w) return;
+      set = set || {};
+      sl.w.forEach(function(d){ set[d] = 1; });
+    });
+    return set;                       // null = every collection day
+  }
+  function routeSeq(k, days){
+    var seq = routes[k] || [];
+    if(!days) return seq;
+    return seq.filter(function(st){
+      return !st.w || st.w.some(function(d){ return days[d]; });
+    });
+  }
+  function daysLabel(days){
+    return Object.keys(days).sort().map(function(d){ return "週" + DAY_NAME[d]; }).join("、");
+  }
+
+  function suspects(seq){
+    return seq.map(function(q, i){
+      if(i === 0 || i === seq.length-1 || q.x) return null;
+      var p = seq[i-1], n = seq[i+1];
+      var dpq = haversine(p.t,p.g,q.t,q.g), dqn = haversine(q.t,q.g,n.t,n.g), dpn = haversine(p.t,p.g,n.t,n.g);
+      return (dpq > SPIKE_M && dqn > SPIKE_M && dpn < 0.5*Math.min(dpq,dqn))
+        ? { prev:dpq, next:dqn, across:dpn } : null;
+    });
+  }
+
+  /* ---------- helpers ---------- */
+  function haversine(lat1,lng1,lat2,lng2){
+    var R=6371000, rad=Math.PI/180;
+    var dLat=(lat2-lat1)*rad, dLng=(lng2-lng1)*rad;
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));
+  }
+  function fmtDist(m){
+    if(m<1000) return { v:String(Math.round(m)), u:"公尺" };
+    return { v:(m/1000).toFixed(m<10000?1:0), u:"公里" };
+  }
+  function hhmm(v){ var h=Math.floor(v/100)%24, m=v%100; return (h<10?"0":"")+h+":"+(m<10?"0":"")+m; }
+  function minutes(v){ return Math.floor(v/100)*60 + (v%100); }
+  var DISTRICT_RE = /^(中正|大同|中山|松山|大安|萬華|信義|士林|北投|內湖|南港|文山)區/;
+  function shortName(n){ return n.replace(/^(臺北市|台北市)/,"").replace(DISTRICT_RE,""); }
+
+  var now = new Date();
+  var nowMin = now.getHours()*60 + now.getMinutes();
+  // The data writes runs past midnight as 2411 (= 00:11). Before 04:00 we are still
+  // inside last night's runs, so compare against minutes counted from yesterday.
+  var nowSvc = nowMin < 240 ? nowMin + 1440 : nowMin;
+  var dow = now.getDay();
+  var dayParam = /[?&]day=([0-6])(?:&|$)/.exec(location.search);
+  if(dayParam) dow = +dayParam[1];
+  var isRestDay = (dow===0 || dow===3);
+  /* ---------- rest day (Wed / Sun) ---------- */
+  var WEEKDAY = ["日","一","二","三","四","五","六"];
+  (function(){
+    if(!isRestDay) return;
+    var panel = document.getElementById("restday"),
+        pill  = document.getElementById("restPill"),
+        ok    = document.getElementById("restOk");
+    document.getElementById("restWhen").textContent = "今天星期" + WEEKDAY[dow];
+    document.getElementById("restNext").textContent = "明天星期" + WEEKDAY[(dow+1)%7] + "照常收運。";
+    function show(){ panel.hidden = false; pill.hidden = true; ok.focus(); }
+    function hide(){ panel.hidden = true; pill.hidden = false; }
+    ok.addEventListener("click", hide);
+    pill.addEventListener("click", show);
+    panel.addEventListener("click", function(e){ if(e.target === panel) hide(); });
+    document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !panel.hidden) hide(); });
+    show();
+  })();
+
+  /* ---------- map ---------- */
+  var map = L.map("map", {
+    zoomControl:false, attributionControl:false, preferCanvas:true,
+    minZoom:12, maxZoom:19, zoomSnap:.5
+  });
+  var bounds = (function(){
+    var la0 = 90, la1 = -90, ln0 = 180, ln1 = -180;
+    window.STOPS.forEach(function(s){
+      if(s.t < la0) la0 = s.t; if(s.t > la1) la1 = s.t;
+      if(s.g < ln0) ln0 = s.g; if(s.g > ln1) ln1 = s.g;
+    });
+    return L.latLngBounds([la0, ln0], [la1, ln1]);
+  })();
+  map.setMaxBounds(bounds.pad(0.3));
+  map.setView([HOME.lat, HOME.lng], 17);
+
+  document.getElementById("zoomIn").onclick  = function(){ map.zoomIn(1); };
+  document.getElementById("zoomOut").onclick = function(){ map.zoomOut(1); };
+
+  /* ---------- streets: decoded and drawn only for the cells on screen ---------- */
+  // 0 arterial | 1 secondary | 2 residential | 3 service (巷弄) | 4 foot
+  var ROAD = [
+    { color:"--road-major", w:5,   minZ:0    },
+    { color:"--road-mid",   w:3,   minZ:12.5 },
+    { color:"--road-minor", w:1.9, minZ:14   },
+    { color:"--road-alley", w:1.1, minZ:15   },
+    { color:"--road-foot",  w:.9,  minZ:15.5, dash:"2 3" }
+  ];
+  var S = window.STREETS && window.STREETS.w ? window.STREETS : null;
+
+  // one pane + canvas per road class, so arterials always paint above lanes
+  // no matter which cell loaded first; all sit below stops and routes (400)
+  var roadRenderers = ROAD.map(function(r, c){
+    var pane = map.createPane("road" + c);
+    pane.style.zIndex = 384 - c;
+    pane.style.pointerEvents = "none";
+    return L.canvas({ pane: "road" + c, padding: 0.3 });
+  });
+
+  function cellRange(b, margin){
+    var c = S.cell, o = S.o;
+    return {
+      y0: Math.floor((b.getSouth() - o[0]) / c) - margin, y1: Math.floor((b.getNorth() - o[0]) / c) + margin,
+      x0: Math.floor((b.getWest()  - o[1]) / c) - margin, x1: Math.floor((b.getEast()  - o[1]) / c) + margin
+    };
+  }
+
+  var decodedWays = Object.create(null);
+  function waysIn(key){
+    if(decodedWays[key]) return decodedWays[key];
+    var lanes = [[],[],[],[],[]];
+    (S.w[key] || []).forEach(function(w){
+      var lat = S.o[0] + w[1]/S.s, lng = S.o[1] + w[2]/S.s;
+      var pts = [[lat, lng]];
+      for(var i = 3; i < w.length; i += 2){
+        lat += w[i]/S.s; lng += w[i+1]/S.s;
+        pts.push([lat, lng]);
+      }
+      lanes[w[0]].push(pts);
+    });
+    return (decodedWays[key] = lanes);
+  }
+
+  var roadLayers = Object.create(null);
+  function syncStreets(){
+    if(!S) return;
+    var z = map.getZoom(), r = cellRange(map.getBounds(), 1), want = Object.create(null);
+    for(var y = r.y0; y <= r.y1; y++){
+      for(var x = r.x0; x <= r.x1; x++){
+        var key = y + ":" + x;
+        if(!S.w[key]) continue;
+        for(var c = 0; c < ROAD.length; c++){
+          if(z < ROAD[c].minZ) continue;
+          var lane = waysIn(key)[c];
+          if(lane.length) want[c + "|" + key] = lane;
+        }
+      }
+    }
+    Object.keys(roadLayers).forEach(function(k){
+      if(!want[k]){ map.removeLayer(roadLayers[k]); delete roadLayers[k]; }
+    });
+    Object.keys(want).forEach(function(k){
+      if(roadLayers[k]) return;
+      var c = +k.split("|")[0], st = ROAD[c];
+      roadLayers[k] = L.polyline(want[k], {
+        renderer: roadRenderers[c], color: tok(st.color), weight: st.w, dashArray: st.dash,
+        opacity: 1, interactive: false, smoothFactor: 2, lineJoin: "round", lineCap: "round"
+      }).addTo(map);
+    });
+  }
+  map.on("moveend", syncStreets);
+  syncStreets();
+
+  /* ---------- street-name labels (own canvas, only cells on screen) ---------- */
+  var labelCanvas = document.getElementById("labels"),
+      lctx = labelCanvas.getContext("2d"),
+      zooming = false, widthCache = Object.create(null);
+
+  var LBL_MINZ   = [13.5, 15, 16, 17, 17.5];
+  var LBL_SIZE   = [12.5, 11.5, 10.5, 9.5, 9];
+  var LBL_WEIGHT = ["700","500","400","400","400"];
+  var LBL_MAX    = 170;
+
+  var decodedLabels = Object.create(null);
+  function labelsIn(key){
+    if(decodedLabels[key]) return decodedLabels[key];
+    return (decodedLabels[key] = ((S && S.l && S.l[key]) || []).map(function(a){
+      return { name:S.n[a[0]], cls:a[1],
+               lat: S.o[0]+a[2]/S.s, lng: S.o[1]+a[3]/S.s,
+               lat2:S.o[0]+a[4]/S.s, lng2:S.o[1]+a[5]/S.s };
+    }));
+  }
+
+  // The bitmap must track the element's CSS box exactly, or the browser scales
+  // whatever was drawn — which is how labels end up several times too large.
+  function sizeLabelCanvas(){
+    var r = labelCanvas.getBoundingClientRect();
+    if(!r.width || !r.height) return false;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+    if(labelCanvas.width === w && labelCanvas.height === h) return true;
+    labelCanvas.width = w;
+    labelCanvas.height = h;
+    lctx.setTransform(dpr,0,0,dpr,0,0);
+    widthCache = Object.create(null);
+    return true;
+  }
+  function textWidth(txt, font){
+    var k = font+"|"+txt;
+    if(widthCache[k] === undefined){ lctx.font = font; widthCache[k] = lctx.measureText(txt).width; }
+    return widthCache[k];
+  }
+
+  function drawLabels(){
+    if(!S || !S.l) return;
+    if(!sizeLabelCanvas()) return;
+    lctx.save();
+    lctx.setTransform(1,0,0,1,0,0);
+    lctx.clearRect(0,0,labelCanvas.width,labelCanvas.height);
+    lctx.restore();
+    if(zooming) return;
+
+    var z = map.getZoom(), size = map.getSize(), b = map.getBounds();
+    if(z < LBL_MINZ[0]) return;
+
+    var r = cellRange(b, 0), byClass = [[],[],[],[],[]];
+    for(var y = r.y0; y <= r.y1; y++){
+      for(var x = r.x0; x <= r.x1; x++){
+        labelsIn(y + ":" + x).forEach(function(a){ if(z >= LBL_MINZ[a.cls]) byClass[a.cls].push(a); });
+      }
+    }
+
+    var placed = [], byName = Object.create(null), drawn = 0;
+    lctx.textAlign = "center";
+    lctx.textBaseline = "middle";
+    lctx.lineJoin = "round";
+    lctx.strokeStyle = tok("--label-halo");
+    lctx.fillStyle = tok("--label");
+
+    for(var cls = 0; cls < 5 && drawn < LBL_MAX; cls++){
+      var fs = LBL_SIZE[cls];
+      var font = LBL_WEIGHT[cls]+" "+fs+'px "Noto Sans TC","PingFang TC",sans-serif';
+      var minGap = cls >= 3 ? 150 : 320;
+      var list = byClass[cls];
+
+      for(var i = 0; i < list.length && drawn < LBL_MAX; i++){
+        var a = list[i];
+        if(!b.contains([a.lat, a.lng])) continue;
+        var p = map.latLngToContainerPoint([a.lat, a.lng]);
+        if(p.x < 6 || p.y < 6 || p.x > size.x-6 || p.y > size.y-6) continue;
+
+        var prev = byName[a.name];
+        if(prev && Math.abs(prev.x-p.x)+Math.abs(prev.y-p.y) < minGap) continue;
+
+        var qp = map.latLngToContainerPoint([a.lat2, a.lng2]);
+        var ang = Math.atan2(qp.y-p.y, qp.x-p.x);
+        if(ang > Math.PI/2) ang -= Math.PI;
+        if(ang < -Math.PI/2) ang += Math.PI;
+
+        var tw = textWidth(a.name, font);
+        var ca = Math.abs(Math.cos(ang)), sa = Math.abs(Math.sin(ang));
+        var bw = (tw*ca + fs*sa)/2 + 3, bh = (tw*sa + fs*ca)/2 + 3;
+
+        var hit = false;
+        for(var j = 0; j < placed.length; j++){
+          var o = placed[j];
+          if(Math.abs(o.x-p.x) < o.w+bw && Math.abs(o.y-p.y) < o.h+bh){ hit = true; break; }
+        }
+        if(hit) continue;
+
+        placed.push({ x:p.x, y:p.y, w:bw, h:bh });
+        byName[a.name] = p;
+        drawn++;
+
+        lctx.save();
+        lctx.translate(p.x, p.y);
+        lctx.rotate(ang);
+        lctx.font = font;
+        lctx.lineWidth = 3.5;
+        lctx.strokeText(a.name, 0, 0);
+        lctx.fillText(a.name, 0, 0);
+        lctx.restore();
+      }
+    }
+  }
+
+  map.on("move", drawLabels);
+  map.on("zoomstart", function(){ zooming = true; drawLabels(); });
+  map.on("zoomend",  function(){ zooming = false; drawLabels(); });
+  map.on("resize viewreset", function(){ sizeLabelCanvas(); drawLabels(); });
+
+  var routeLayer = L.layerGroup().addTo(map);
+  var stopLayer  = L.layerGroup().addTo(map);
+  var meLayer    = L.layerGroup().addTo(map);
+
+  var origin = { lat:HOME.lat, lng:HOME.lng, label:HOME.label, live:false };
+  var selected = null, showRoute = false, ranked = [], markers = [];
+  var geoState = "unknown";   // unknown | blocked | denied | ok
+  var crossEl = document.getElementById("cross");
+
+  var toastEl = document.getElementById("toast"), toastTimer = null;
+  function toast(msg, ms){
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.hidden = true; }, ms || 4200);
+  }
+
+  /* ---------- ranking + markers ---------- */
+  function rank(){
+    ranked = groups.map(function(g){
+      return { g:g, m:haversine(origin.lat, origin.lng, g.lat, g.lng) };
+    }).sort(function(a,b){ return a.m-b.m; });
+    ranked.forEach(function(r,i){ r.g._rank = i; r.g._m = r.m; });
+  }
+  function buildStops(){
+    stopLayer.clearLayers();
+    markers = groups.map(function(g){
+      var mk = L.circleMarker([g.lat, g.lng], {
+        radius:4.5, fillColor:tok("--dot"), fillOpacity:1,
+        color:tok("--surface"), weight:1.3, bubblingMouseEvents:false
+      });
+      mk.on("click", function(){ select(g, true); });
+      mk.addTo(stopLayer);
+      return { g:g, mk:mk };
+    });
+  }
+  function styleStops(){
+    markers.forEach(function(e){
+      var g = e.g, isSel = selected === g, isTop = g._rank === 0;
+      e.mk.setStyle({
+        radius: isSel ? 9 : (isTop ? 7 : 4.5),
+        fillColor: isSel || isTop ? tok("--accent") : (g._m < 500 ? tok("--near") : tok("--dot")),
+        color: isSel ? tok("--ink") : tok("--surface"),
+        weight: isSel ? 2.5 : 1.3
+      });
+      if(isSel || isTop) e.mk.bringToFront();
+    });
+  }
+  function drawMe(){
+    meLayer.clearLayers();
+    crossEl.hidden = origin.live;
+    if(!origin.live) return;
+    if(origin.acc){
+      L.circle([origin.lat, origin.lng], {
+        radius:origin.acc, color:tok("--near"), weight:1,
+        fillColor:tok("--near"), fillOpacity:.08, interactive:false
+      }).addTo(meLayer);
+    }
+    L.circleMarker([origin.lat, origin.lng], {
+      radius:7, fillColor:tok("--near"), fillOpacity:1,
+      color:tok("--surface"), weight:3, interactive:false
+    }).addTo(meLayer);
+  }
+  function drawRoute(){
+    routeLayer.clearLayers();
+    if(!showRoute || !selected) return;
+    var days = stopDays(selected);
+    routeKeys(selected).forEach(function(k){
+      var seq = routeSeq(k, days);
+      if(!seq || seq.length < 2) return;
+      var bad = suspects(seq);
+      for(var i = 1; i < seq.length; i++){
+        var a = seq[i-1], b = seq[i];
+        var warn = !!(bad[i-1] || bad[i]);
+        L.polyline([[a.t, a.g], [b.t, b.g]], {
+          color: warn ? tok("--warn") : tok("--accent"),
+          weight: warn ? 2 : 2.5, opacity:.85,
+          dashArray: warn ? "2 6" : "5 5", interactive:false, lineJoin:"round"
+        }).addTo(routeLayer);
+      }
+      seq.forEach(function(s){
+        L.circleMarker([s.t, s.g], {
+          radius:3, fillColor:tok("--accent"), fillOpacity:1,
+          color:tok("--surface"), weight:1, interactive:false
+        }).addTo(routeLayer);
+      });
+    });
+  }
+
+  /* ---------- sheet ---------- */
+  var sheet = document.getElementById("sheet"),
+      sheetBody = document.getElementById("sheetBody"),
+      sheetTitle = document.getElementById("sheetTitle"),
+      countEl = document.getElementById("count"),
+      grip = document.getElementById("grip");
+
+  function toggleSheet(){
+    sheet.classList.toggle("tall");
+    setTimeout(function(){ map.invalidateSize(); sizeLabelCanvas(); drawLabels(); }, 240);
+  }
+  grip.addEventListener("click", toggleSheet);
+  grip.addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); toggleSheet(); }
+  });
+
+  function slotEl(s){
+    var span = document.createElement("span");
+    var startM = minutes(s.a), endM = minutes(s.e), cls = "slot", when = "";
+    if(!isRestDay && s.w && s.w.indexOf(dow) === -1){ cls += " past"; when = "今天不收"; }
+    else if(!isRestDay){
+      if(nowSvc >= startM && nowSvc <= endM){ cls += " upcoming"; when = "車在現場"; }
+      else if(startM > nowSvc){
+        cls += " upcoming";
+        var diff = startM - nowSvc;
+        when = diff < 60 ? diff+" 分後" : Math.floor(diff/60)+" 小時後";
+      } else { cls += " past"; when = "已過"; }
+    }
+    span.className = cls;
+    span.innerHTML = hhmm(s.a)+"–"+hhmm(s.e) + (when ? '<span class="when">'+when+"</span>" : "");
+    return span;
+  }
+
+
+  function renderList(){
+    sheetTitle.textContent = "依距離排序";
+    countEl.className = "count hint";
+    countEl.textContent = "右上角可搜尋街名；拖動地圖也會重算距離。";
+    sheetBody.innerHTML = "";
+
+    var ol = document.createElement("ol");
+    ol.className = "stops";
+    ranked.slice(0, 20).forEach(function(r){
+      var g = r.g, d = fmtDist(r.m);
+      var li = document.createElement("li");
+      li.className = "stop" + (selected === g ? " sel" : (r.m < 500 ? " near" : ""));
+      li.tabIndex = 0;
+
+      var dv = document.createElement("div");
+      dv.className = "dist";
+      dv.innerHTML = d.v + "<small>"+d.u+"</small>";
+      li.appendChild(dv);
+
+      var body = document.createElement("div");
+      body.className = "body";
+      var nm = document.createElement("div");
+      nm.className = "name";
+      nm.textContent = shortName(g.name);
+      body.appendChild(nm);
+      var tw = document.createElement("div");
+      tw.className = "times";
+      g.slots.forEach(function(s){ tw.appendChild(slotEl(s)); });
+      body.appendChild(tw);
+      li.appendChild(body);
+
+      function go(){ select(g, true); }
+      li.addEventListener("click", go);
+      li.addEventListener("keydown", function(e){
+        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); go(); }
+      });
+      ol.appendChild(li);
+    });
+    sheetBody.appendChild(ol);
+    sheetBody.appendChild(notesEl());
+  }
+
+  function renderDetail(g){
+    sheetTitle.textContent = "收運點";
+    countEl.className = "count";
+    countEl.textContent = "第 "+(g._rank+1)+" 近";
+    sheetBody.innerHTML = "";
+
+    var wrap = document.createElement("div");
+    wrap.className = "detail";
+
+    var back = document.createElement("button");
+    back.className = "backlink";
+    back.textContent = "← 回到清單";
+    back.addEventListener("click", function(){ select(null, false); });
+    wrap.appendChild(back);
+
+    var h = document.createElement("h3");
+    h.textContent = shortName(g.name);
+    wrap.appendChild(h);
+
+    var d = fmtDist(g._m);
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = g.dist + g.vil + " · 離" + (origin.live ? "你" : origin.label) + " " + d.v + " " + d.u;
+    wrap.appendChild(sub);
+
+    var tw = document.createElement("div");
+    tw.className = "times";
+    g.slots.forEach(function(s){ tw.appendChild(slotEl(s)); });
+    wrap.appendChild(tw);
+
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    var seen = [];
+    g.slots.forEach(function(s){
+      var label = s.route+" · "+s.car+" · "+s.plate;
+      if(seen.indexOf(label) !== -1) return;
+      seen.push(label);
+      var c = document.createElement("span");
+      c.className = "chip route";
+      c.textContent = label;
+      meta.appendChild(c);
+    });
+    wrap.appendChild(meta);
+
+
+    var gDays = stopDays(g);
+    routeKeys(g).forEach(function(k){
+      var seq = routeSeq(k, gDays);
+      if(!seq || !seq.length) return;
+      var parts = k.split("|");
+      var bad = suspects(seq);
+
+      var sec = document.createElement("div");
+      sec.className = "routeseq";
+
+      var head = document.createElement("div");
+      head.className = "rshead";
+      var chip = document.createElement("span");
+      chip.className = "chip route";
+      chip.textContent = parts[0] + " · " + parts[1];
+      head.appendChild(chip);
+      var rsm = document.createElement("span");
+      rsm.className = "rsmeta";
+      rsm.textContent = (gDays ? daysLabel(gDays) + " · " : "") + seq.length + " 站 · " + hhmm(seq[0].a) + "–" + hhmm(seq[seq.length-1].e);
+      head.appendChild(rsm);
+      sec.appendChild(head);
+
+      var isCur = seq.map(function(s){
+        return s.n === g.name && Math.abs(s.g-g.lng) < 1e-6 && Math.abs(s.t-g.lat) < 1e-6;
+      });
+
+      var ol = document.createElement("ol");
+      ol.className = "rslist";
+      seq.forEach(function(s, i){
+        var cur = isCur[i];
+        var prev = !cur && isCur[i+1] === true;
+        var next = !cur && isCur[i-1] === true;
+
+        var li = document.createElement("li");
+        var row = document.createElement(cur ? "div" : "button");
+        row.className = "rs" + (cur ? " cur" : (prev || next ? " adj" : "")) + (bad[i] ? " bad" : "");
+        if(!cur) row.type = "button";
+
+        var t = document.createElement("span"); t.className = "rst"; t.textContent = hhmm(s.a);
+        var dot = document.createElement("span"); dot.className = "rsdot";
+        var nm = document.createElement("span"); nm.className = "rsn"; nm.textContent = shortName(s.n);
+        row.appendChild(t); row.appendChild(dot); row.appendChild(nm);
+
+        if(cur || prev || next){
+          var tag = document.createElement("span");
+          tag.className = "rstag";
+          tag.textContent = cur ? "本站" : (prev ? "上一站" : "下一站");
+          row.appendChild(tag);
+        }
+        if(bad[i]){
+          var km = function(m){ return m < 1000 ? Math.round(m) + " 公尺" : (m/1000).toFixed(1) + " 公里"; };
+          var w = document.createElement("span");
+          w.className = "rswarn";
+          w.textContent = "離上一站 " + km(bad[i].prev) + "、下一站 " + km(bad[i].next) +
+                          "，但前後兩站只隔 " + km(bad[i].across) + " —— 這站的座標可能有誤";
+          row.appendChild(w);
+        }
+        if(!cur){
+          row.addEventListener("click", function(){
+            var target = groupIndex[s.n+"|"+s.g.toFixed(5)+"|"+s.t.toFixed(5)];
+            if(target) select(target, true);
+          });
+        }
+        li.appendChild(row);
+        ol.appendChild(li);
+      });
+      sec.appendChild(ol);
+      wrap.appendChild(sec);
+    });
+
+    var rn = document.createElement("div");
+    rn.className = "routenote";
+    rn.textContent = "站序依抵達時間排列，點任一站可跳過去。按右下角「路線」可在地圖上畫出來；虛線只是依序連接各站，不是實際行車路徑。";
+    wrap.appendChild(rn);
+
+    sheetBody.appendChild(wrap);
+    sheetBody.appendChild(notesEl());
+  }
+
+  function notesEl(){
+    var n = document.createElement("div");
+    n.className = "notes";
+    var districts = Object.create(null);
+    groups.forEach(function(g){ districts[g.dist] = 1; });
+    var items = [
+      "臺北市 <strong>" + Object.keys(districts).length + "</strong> 個行政區、<strong>" + groups.length + "</strong> 個收運點，來自你提供的點位資訊檔。"
+    ].concat(window.DATA_NOTES || []).concat([
+      "原始檔<strong>沒有星期欄位</strong>，只能呈現時刻表，無法判斷特定日期是否收運，也分不出一般垃圾／資源回收／廚餘。",
+      "時間超過 24:00 的班次視為隔天凌晨，例如原始資料的 <code>2411</code> 顯示為 00:11。",
+      "手機 GPS 市區誤差約 20–100 公尺，收運點常間隔不到 50 公尺，「最近的點」請當參考。",
+      "街道、巷弄與路名為 OpenStreetMap 向量資料，離線內建；此頁不連任何地圖伺服器。"
+    ]);
+    n.innerHTML = "<h4>關於這份資料</h4><ul>" +
+      items.map(function(t){ return "<li>" + t + "</li>"; }).join("") + "</ul>";
+    return n;
+  }
+
+  /* ---------- selection ---------- */
+  function select(g, pan){
+    selected = g;
+    if(!g) showRoute = false;
+    syncRouteBtn();
+    styleStops();
+    drawRoute();
+    if(g){
+      renderDetail(g);
+      if(pan) map.panTo([g.lat, g.lng], { animate:true, duration:.4 });
+    } else {
+      renderList();
+    }
+    sheetBody.scrollTop = 0;
+  }
+  map.on("click", function(){ if(selected) select(null, false); });
+
+  var routeBtn = document.getElementById("routeBtn");
+  function syncRouteBtn(){
+    routeBtn.classList.toggle("on", showRoute);
+    routeBtn.classList.toggle("dead", !selected);
+  }
+  routeBtn.addEventListener("click", function(){
+    if(!selected){ toast("先在地圖或清單上點一個收運點"); return; }
+    showRoute = !showRoute;
+    syncRouteBtn();
+    drawRoute();
+  });
+
+  /* ---------- origin ---------- */
+  function refresh(){
+    rank();
+    styleStops();
+    drawMe();
+    drawRoute();
+    if(selected) renderDetail(selected); else renderList();
+  }
+  function setCentreOrigin(label){
+    var c = map.getCenter();
+    origin = { lat:c.lat, lng:c.lng, label: label || "地圖中心", live:false };
+    refresh();
+  }
+  map.on("moveend", function(){
+    if(origin.live) return;
+    var c = map.getCenter();
+    if(haversine(origin.lat, origin.lng, c.lat, c.lng) < 25) return;
+    setCentreOrigin("地圖中心");
+  });
+
+  /* ---------- geolocation, with an honest diagnosis ---------- */
+  var permState = null;
+  if(navigator.permissions && navigator.permissions.query){
+    try{
+      navigator.permissions.query({ name:"geolocation" })
+        .then(function(p){ permState = p.state; })
+        .catch(function(){});
+    }catch(e){}
+  }
+
+  var locBtn = document.getElementById("locBtn");
+  var FALLBACK = "按右上角搜尋，或拖動地圖，一樣能查。";
+
+  function locate(auto){
+    if(!navigator.geolocation){
+      geoState = "blocked";
+      if(!auto) toast("這個瀏覽器不支援定位。" + FALLBACK, 6000);
+      return;
+    }
+    toast(auto ? "正在取得你的位置，以列出最近的收運點…" : "正在取得位置…", 9000);
+    var t0 = Date.now();
+    navigator.geolocation.getCurrentPosition(function(pos){
+      geoState = "ok";
+      locBtn.classList.remove("dead");
+      var la = pos.coords.latitude, ln = pos.coords.longitude;
+      origin = { lat:la, lng:ln, label:"目前位置", live:true, acc:pos.coords.accuracy };
+      refresh();
+      map.setView([la, ln], 17);
+      toast(bounds.contains([la, ln])
+        ? "定位完成，精度約 ±" + Math.round(pos.coords.accuracy) + " 公尺"
+        : "你目前不在台北市範圍內，以下是離你最近的點");
+    }, function(err){
+      var instant = (Date.now() - t0) < 500;
+      locBtn.classList.add("dead");
+      if(err.code === 1 && location.protocol === "file:"){
+        geoState = "blocked";
+        toast("直接用檔案開啟時，瀏覽器通常不給定位權限。" + FALLBACK + "放到 HTTPS 網址上就能定位。", 9000);
+      } else if(err.code === 1 && instant && permState !== "denied"){
+        geoState = "blocked";
+        toast("瀏覽器沒有把定位權限交給這個頁面。" + FALLBACK, 8000);
+      } else if(err.code === 1){
+        geoState = "denied";
+        toast("沒有取得定位授權。要使用定位，請到瀏覽器的網站設定允許位置。" + FALLBACK, 8000);
+      } else {
+        geoState = "error";
+        toast("取不到位置（" + err.message + "）。" + FALLBACK, 8000);
+      }
+    }, { enableHighAccuracy:true, timeout:10000, maximumAge:60000 });
+  }
+  locBtn.addEventListener("click", function(){ locate(false); });
+
+  /* ---------- search ---------- */
+  var qEl = document.getElementById("q"),
+      qClear = document.getElementById("qClear"),
+      suggestEl = document.getElementById("suggest"),
+      qOpen = document.getElementById("qOpen"),
+      topEl = document.getElementById("top"),
+      searchWrap = document.getElementById("searchwrap");
+
+  function openSearch(){
+    topEl.classList.add("searching");
+    searchWrap.hidden = false;
+    qOpen.setAttribute("aria-expanded", "true");
+    qEl.focus();
+  }
+  function closeSearch(){
+    qEl.value = "";
+    closeSuggest();
+    qEl.blur();
+    searchWrap.hidden = true;
+    topEl.classList.remove("searching");
+    qOpen.setAttribute("aria-expanded", "false");
+  }
+  qOpen.addEventListener("click", openSearch);
+
+  var streetIndex = (function(){
+    var S = window.STREETS;
+    if(!S || !S.q) return [];
+    return S.q.map(function(e){
+      return { name:e[0], cls:e[1], lat:S.o[0]+e[2]/S.s, lng:S.o[1]+e[3]/S.s, kind:"street" };
+    });
+  })();
+  var stopIndex = groups.map(function(g){
+    return { name:shortName(g.name), lat:g.lat, lng:g.lng, kind:"stop", g:g };
+  });
+
+  function search(term){
+    term = term.trim().replace(/^(臺北市|台北市)/,"").replace(DISTRICT_RE,"");
+    if(!term) return [];
+    var hits = [];
+    function scan(arr, base){
+      for(var i=0;i<arr.length && hits.length<400;i++){
+        var idx = arr[i].name.indexOf(term);
+        if(idx === -1) continue;
+        hits.push({ e:arr[i], score: base + (arr[i].name===term?-50:0) + (idx===0?0:20) + (arr[i].cls||0)*2 + arr[i].name.length*0.1 });
+      }
+    }
+    scan(streetIndex, 0);
+    scan(stopIndex, 5);
+    hits.sort(function(a,b){ return a.score-b.score; });
+    return hits.slice(0, 9).map(function(h){ return h.e; });
+  }
+
+  function renderSuggest(items, term){
+    suggestEl.innerHTML = "";
+    if(!term){ suggestEl.hidden = true; return; }
+    if(!items.length){
+      var e = document.createElement("div");
+      e.className = "sgempty";
+      e.textContent = "找不到「"+term+"」。試試路名或巷號，例如「通化街19巷」。";
+      suggestEl.appendChild(e);
+      suggestEl.hidden = false;
+      return;
+    }
+    items.forEach(function(it){
+      var b = document.createElement("button");
+      b.className = "sg";
+      b.type = "button";
+
+      var k = document.createElement("span");
+      k.className = "kind" + (it.kind === "stop" ? " stop" : "");
+      k.textContent = it.kind === "stop" ? "收運點" : "街道";
+      b.appendChild(k);
+
+      var t = document.createElement("span");
+      t.className = "txt";
+      t.textContent = it.name;
+      b.appendChild(t);
+
+      var far = document.createElement("span");
+      far.className = "far";
+      var d = fmtDist(haversine(origin.lat, origin.lng, it.lat, it.lng));
+      far.textContent = d.v + (d.u === "公尺" ? "m" : "km");
+      b.appendChild(far);
+
+      b.addEventListener("click", function(){
+        closeSearch();
+        if(it.kind === "stop"){
+          map.setView([it.lat, it.lng], 18);
+          select(it.g, false);
+        } else {
+          map.setView([it.lat, it.lng], 17.5);
+          origin = { lat:it.lat, lng:it.lng, label:it.name, live:false };
+          if(selected) select(null, false); else refresh();
+          toast("距離改從「"+it.name+"」起算");
+        }
+      });
+      suggestEl.appendChild(b);
+    });
+    suggestEl.hidden = false;
+  }
+  function closeSuggest(){ suggestEl.hidden = true; }
+
+  var qTimer = null;
+  qEl.addEventListener("input", function(){
+    var term = qEl.value;
+    clearTimeout(qTimer);
+    qTimer = setTimeout(function(){ renderSuggest(search(term), term.trim()); }, 110);
+  });
+  qEl.addEventListener("focus", function(){
+    if(qEl.value.trim()) renderSuggest(search(qEl.value), qEl.value.trim());
+  });
+  qEl.addEventListener("keydown", function(e){
+    if(e.key === "Escape") closeSearch();
+    if(e.key === "Enter"){
+      var first = suggestEl.querySelector(".sg");
+      if(first) first.click();
+    }
+  });
+  qClear.addEventListener("click", closeSearch);
+  document.addEventListener("click", function(e){
+    if(e.target.closest(".top")) return;
+    closeSuggest();
+    if(!searchWrap.hidden && !qEl.value.trim()) closeSearch();
+  });
+
+  /* ---------- boot ---------- */
+  sizeLabelCanvas();
+  rank();
+  buildStops();
+  styleStops();
+  drawMe();
+  syncRouteBtn();
+  renderList();
+  drawLabels();
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(function(){
+    widthCache = Object.create(null);
+    drawLabels();
+  });
+  window.addEventListener("resize", function(){
+    map.invalidateSize(); sizeLabelCanvas(); drawLabels();
+  });
+
+  /* ---------- location on open ---------- */
+  // First open: ask for the location straight away. Later opens: use it automatically
+  // only when the browser already has permission, so a refusal is never asked again.
+  (function(){
+    if(!navigator.geolocation) return;
+    var KEY = "gtmap.locationAsked", asked = false;
+    try{ asked = localStorage.getItem(KEY) === "1"; }catch(e){}
+    if(!asked){
+      try{ localStorage.setItem(KEY, "1"); }catch(e){}
+      locate(true);
+      return;
+    }
+    if(navigator.permissions && navigator.permissions.query){
+      navigator.permissions.query({ name:"geolocation" })
+        .then(function(p){ if(p.state === "granted") locate(true); })
+        .catch(function(){});
+    }
+  })();
+})();
+</script>

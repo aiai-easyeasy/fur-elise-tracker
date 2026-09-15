@@ -1,0 +1,14 @@
+{
+  "name": "fur-elise-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "垃圾車在哪 — 臺北市 12 區垃圾車收運點離線地圖，單一 HTML 檔",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build-stops.js && node scripts/fix-data.js && node scripts/build-offline.js",
+    "fetch-streets": "node scripts/build-stops.js && node scripts/fetch-streets.js",
+    "build-streets": "node scripts/build-streets.js"
+  }
+}
