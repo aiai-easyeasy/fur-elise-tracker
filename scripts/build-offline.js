@@ -6,11 +6,15 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
 const read = rel => fs.readFileSync(path.join(ROOT, rel), "utf8");
+const dataUri = rel => "data:image/png;base64," + fs.readFileSync(path.join(ROOT, rel)).toString("base64");
 
 const HOME = { lat: 25.03130, lng: 121.55475 };   // 通化街19巷6弄（OSM service way 中點）
 
 for (const rel of ["build/data.js", "data/streets.js"]){
   if (!fs.existsSync(path.join(ROOT, rel))) throw new Error(`${rel} not found — see README「重新建置」`);
+}
+for (const rel of ["assets/icon-180.png", "assets/favicon-32.png"]){
+  if (!fs.existsSync(path.join(ROOT, rel))) throw new Error(`${rel} not found — see README「重新產生 icon」`);
 }
 
 let src = read("src/app.html");
@@ -23,14 +27,24 @@ function inject(label, marker, content){
 }
 
 // 1. real head + body wrapper (the page source starts at <title>)
+// The two small icons are inlined so「加入主畫面」still gets an icon when only
+// index.html is copied around (or opened via file://). manifest.webmanifest and
+// the larger assets/icon-*.png are separate files — Android needs a real
+// manifest URL — and are simply ignored if they aren't deployed alongside.
 const HEAD = `<!doctype html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="垃圾車在哪">
+<meta name="application-name" content="垃圾車在哪">
 <meta name="theme-color" content="#B87C08">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="${dataUri("assets/icon-180.png")}">
+<link rel="icon" type="image/png" sizes="32x32" href="${dataUri("assets/favicon-32.png")}">
 `;
 if (!src.startsWith("<title>")) throw new Error("expected src/app.html to start with <title>");
 src = HEAD + src;
