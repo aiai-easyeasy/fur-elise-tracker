@@ -64,19 +64,10 @@ npm run build-streets
 npm run build
 ```
 
-**重新產生「加入主畫面」的圖示**（換照片，或第一次取得原始檔時才需要）：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/make-icons.ps1 -Source "C:\path\to\photo.jpg"
-npm run build
-```
-
-不加 `-Source` 則沿用已提交的 `assets/icon-source.jpg` 重新產生各尺寸。Windows-only（用 `System.Drawing`），產生的 PNG 一併提交，`build-offline.js` 會把小尺寸內嵌進 `index.html`。
-
 ```
 index.html              成品（建置產生，一併提交以便直接使用與 GitHub Pages）
 manifest.webmanifest    PWA 設定（App 名稱、圖示、主題色）
-assets/                 App 圖示（來源照片與各尺寸 PNG）
+assets/                 「加入主畫面」用的 App 圖示（各尺寸 PNG，已提交，不會重新產生）
 src/app.html            頁面原始碼
 vendor/                 Leaflet
 data/                   收運點 CSV、街道資料

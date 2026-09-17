@@ -14,7 +14,7 @@ for (const rel of ["build/data.js", "data/streets.js"]){
   if (!fs.existsSync(path.join(ROOT, rel))) throw new Error(`${rel} not found — see README「重新建置」`);
 }
 for (const rel of ["assets/icon-180.png", "assets/favicon-32.png"]){
-  if (!fs.existsSync(path.join(ROOT, rel))) throw new Error(`${rel} not found — see README「重新產生 icon」`);
+  if (!fs.existsSync(path.join(ROOT, rel))) throw new Error(`${rel} not found — committed app icon is missing, restore it from git history`);
 }
 
 let src = read("src/app.html");
