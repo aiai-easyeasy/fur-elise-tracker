@@ -940,6 +940,28 @@ body{
 .sheetbody{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
 
 
+/* ---------- 「還沒來的／全部」 filter bar ---------- */
+.filterbar{
+  position:sticky;top:0;z-index:5;
+  display:flex;align-items:center;gap:10px;
+  padding:8px 16px;background:var(--surface-2);
+  border-bottom:1px solid var(--line);
+  font-size:11.5px;line-height:1.5;color:var(--ink-2);
+}
+.filterbar .fbtxt{flex:1;min-width:0}
+.filterbar .fbtxt strong{font-family:var(--mono);font-weight:600;color:var(--ink)}
+.filterbar.all{background:var(--accent-soft);color:var(--accent-ink);border-bottom-color:transparent}
+.filterbar.all .fbtxt strong{color:var(--accent-ink)}
+.filterbar.done{background:var(--warn-soft);color:var(--warn);border-bottom-color:transparent}
+.filterbar.done .fbtxt strong{color:var(--warn)}
+.fbtoggle{
+  flex:none;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;line-height:1;
+  padding:6px 11px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--accent-ink);
+}
+.fbtoggle:hover{border-color:var(--accent)}
+.fbtoggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
 ol.stops{list-style:none;margin:0;padding:0}
 li.stop{
   display:grid;grid-template-columns:56px 1fr;gap:0 12px;
@@ -1218,32 +1240,83 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   var DISTRICT_RE = /^(中正|大同|中山|松山|大安|萬華|信義|士林|北投|內湖|南港|文山)區/;
   function shortName(n){ return n.replace(/^(臺北市|台北市)/,"").replace(DISTRICT_RE,""); }
 
-  var now = new Date();
-  var nowMin = now.getHours()*60 + now.getMinutes();
-  // The data writes runs past midnight as 2411 (= 00:11). Before 04:00 we are still
-  // inside last night's runs, so compare against minutes counted from yesterday.
-  var nowSvc = nowMin < 240 ? nowMin + 1440 : nowMin;
-  var dow = now.getDay();
+  /* ---------- clock ---------- */
+  // Read on a timer instead of once at load, so a page left open (or a phone woken
+  // up hours later) never shows a stale 「20 分後」.
+  // ?day=0..6 and ?now=HH:MM freeze the weekday / time of day, for checking how the
+  // page behaves on a rest day or late at night without waiting for one.
   var dayParam = /[?&]day=([0-6])(?:&|$)/.exec(location.search);
-  if(dayParam) dow = +dayParam[1];
-  var isRestDay = (dow===0 || dow===3);
+  var FIXED_DOW = dayParam ? +dayParam[1] : null;
+  var nowParam = /[?&]now=(\d{1,2}):?(\d{2})(?:&|$)/.exec(location.search);
+  var FIXED_MIN = nowParam ? (+nowParam[1] % 24)*60 + (+nowParam[2] % 60) : null;
+  var nowSvc = 0, dow = 0, isRestDay = false;
+
+  function readClock(){
+    var d = new Date();
+    var nowMin = FIXED_MIN === null ? d.getHours()*60 + d.getMinutes() : FIXED_MIN;
+    // The data writes runs past midnight as 2411 (= 00:11). Before 04:00 we are still
+    // inside last night's runs, so compare against minutes counted from yesterday.
+    nowSvc = nowMin < 240 ? nowMin + 1440 : nowMin;
+    dow = FIXED_DOW === null ? d.getDay() : FIXED_DOW;
+    isRestDay = (dow === 0 || dow === 3);
+  }
+  readClock();
+
+  // Aligned to the wall clock, not to load time, so labels flip on the minute.
+  var tickTimer = null;
+  function scheduleTick(){
+    clearTimeout(tickTimer);
+    tickTimer = setTimeout(function(){ tick(); scheduleTick(); }, 60000 - (Date.now() % 60000) + 200);
+  }
+  function tick(){
+    var was = dow + "@" + nowSvc;
+    readClock();
+    if(was === dow + "@" + nowSvc) return;
+    syncRestDay(false);
+    applyFilter();
+    styleStops();
+    var keep = sheetBody.scrollTop;
+    if(selected) renderDetail(selected); else renderList();
+    sheetBody.scrollTop = keep;      // a silent minute tick must not scroll the sheet
+  }
+
   /* ---------- rest day (Wed / Sun) ---------- */
   var WEEKDAY = ["日","一","二","三","四","五","六"];
-  (function(){
-    if(!isRestDay) return;
-    var panel = document.getElementById("restday"),
-        pill  = document.getElementById("restPill"),
-        ok    = document.getElementById("restOk");
+  var restPanel = document.getElementById("restday"),
+      restPill  = document.getElementById("restPill"),
+      restOk    = document.getElementById("restOk"),
+      restAnnounced = false;
+
+  function hideRestPanel(){ restPanel.hidden = true; restPill.hidden = !isRestDay; }
+  restOk.addEventListener("click", hideRestPanel);
+  restPill.addEventListener("click", function(){
+    restPanel.hidden = false; restPill.hidden = true; restOk.focus();
+  });
+  restPanel.addEventListener("click", function(e){ if(e.target === restPanel) hideRestPanel(); });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape" && !restPanel.hidden) hideRestPanel();
+  });
+
+  // The full-screen notice only interrupts once, on open. If midnight turns a working
+  // day into a rest day while the page sits there, the header pill is enough.
+  function syncRestDay(announce){
+    if(!isRestDay){
+      restPanel.hidden = true;
+      restPill.hidden = true;
+      return;
+    }
     document.getElementById("restWhen").textContent = "今天星期" + WEEKDAY[dow];
     document.getElementById("restNext").textContent = "明天星期" + WEEKDAY[(dow+1)%7] + "照常收運。";
-    function show(){ panel.hidden = false; pill.hidden = true; ok.focus(); }
-    function hide(){ panel.hidden = true; pill.hidden = false; }
-    ok.addEventListener("click", hide);
-    pill.addEventListener("click", show);
-    panel.addEventListener("click", function(e){ if(e.target === panel) hide(); });
-    document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !panel.hidden) hide(); });
-    show();
-  })();
+    if(announce && !restAnnounced){
+      restAnnounced = true;
+      restPanel.hidden = false;
+      restPill.hidden = true;
+      restOk.focus();
+    } else if(restPanel.hidden){
+      restPill.hidden = false;
+    }
+  }
+  syncRestDay(true);
 
   /* ---------- map ---------- */
   var map = L.map("map", {
@@ -1493,8 +1566,21 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     });
   }
   function styleStops(){
+    // 「最近的收運點」 has to mean the nearest one still shown, so it matches the top
+    // row of the list once past runs are filtered out
+    var top = null;
+    for(var i = 0; i < ranked.length; i++){
+      if(ranked[i].g._slots.length){ top = ranked[i].g; break; }
+    }
     markers.forEach(function(e){
-      var g = e.g, isSel = selected === g, isTop = g._rank === 0;
+      var g = e.g, isSel = selected === g, isTop = g === top;
+      // stops with nothing left today drop off the map too; the selected one always
+      // stays, otherwise picking it from search or a route sequence would blank it out
+      if(!g._slots.length && !isSel){
+        if(stopLayer.hasLayer(e.mk)) stopLayer.removeLayer(e.mk);
+        return;
+      }
+      if(!stopLayer.hasLayer(e.mk)) e.mk.addTo(stopLayer);
       e.mk.setStyle({
         radius: isSel ? 9 : (isTop ? 7 : 4.5),
         fillColor: isSel || isTop ? tok("--accent") : (g._m < 500 ? tok("--near") : tok("--dot")),
@@ -1563,18 +1649,90 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     if(e.key === "Enter" || e.key === " "){ e.preventDefault(); toggleSheet(); }
   });
 
+  /* ---------- 「還沒來的」 filter ---------- */
+  // Runs that are over (or that don't run today) are dropped from the list and the
+  // map by default; the bar above the list switches back to the whole timetable.
+  var PAST_KEY = "gtmap.showPast";
+  var showPast = false;
+  try{ showPast = localStorage.getItem(PAST_KEY) === "1"; }catch(e){}
+  var hiding = false, hiddenCount = 0, allDone = false;
+
+  // rest 停收日 | off 今天不收 | now 車在現場 | soon 還沒來 | past 已過
+  function slotState(s){
+    if(isRestDay) return "rest";
+    if(s.w && s.w.indexOf(dow) === -1) return "off";
+    var startM = minutes(s.a), endM = minutes(s.e);
+    if(nowSvc >= startM && nowSvc <= endM) return "now";
+    return nowSvc < startM ? "soon" : "past";
+  }
+  function isDone(s){
+    var st = slotState(s);
+    return st === "past" || st === "off";
+  }
+
+  // g._slots = what to list for this stop right now; empty = the stop drops out.
+  function applyFilter(){
+    var left = 0;
+    groups.forEach(function(g){
+      g._slots = showPast ? g.slots : g.slots.filter(function(s){ return !isDone(s); });
+      if(g._slots.length) left++;
+    });
+    // Late at night everything is over; hiding it all would leave an empty map and an
+    // empty list, so fall back to the full timetable and say why.
+    allDone = !showPast && left === 0;
+    hiding = !showPast && !allDone;
+    hiddenCount = hiding ? groups.length - left : 0;
+    if(!hiding) groups.forEach(function(g){ g._slots = g.slots; });
+  }
+
+  function setShowPast(v){
+    showPast = !!v;
+    try{ localStorage.setItem(PAST_KEY, showPast ? "1" : "0"); }catch(e){}
+    applyFilter();
+    styleStops();
+    if(selected) renderDetail(selected); else renderList();
+  }
+
+  function filterBarEl(){
+    var bar = document.createElement("div");
+    var txt = document.createElement("span");
+    txt.className = "fbtxt";
+
+    if(allDone){
+      bar.className = "filterbar done";
+      txt.innerHTML = "今天的班次都跑完了，下面是<strong>明天</strong>的時刻。";
+      bar.appendChild(txt);
+      return bar;
+    }
+    if(hiding && !hiddenCount) return null;      // nothing hidden yet — no need for a row
+
+    bar.className = "filterbar" + (hiding ? "" : " all");
+    txt.innerHTML = hiding
+      ? "已隱藏 <strong>" + hiddenCount + "</strong> 個今天不會再來的點"
+      : "顯示<strong>全部</strong>班次，包含已過的";
+    bar.appendChild(txt);
+
+    var btn = document.createElement("button");
+    btn.className = "fbtoggle";
+    btn.type = "button";
+    btn.setAttribute("aria-pressed", showPast ? "true" : "false");
+    btn.textContent = hiding ? "顯示全部" : "只看還沒來的";
+    btn.addEventListener("click", function(){ setShowPast(!showPast); });
+    bar.appendChild(btn);
+    return bar;
+  }
+
   function slotEl(s){
     var span = document.createElement("span");
-    var startM = minutes(s.a), endM = minutes(s.e), cls = "slot", when = "";
-    if(!isRestDay && s.w && s.w.indexOf(dow) === -1){ cls += " past"; when = "今天不收"; }
-    else if(!isRestDay){
-      if(nowSvc >= startM && nowSvc <= endM){ cls += " upcoming"; when = "車在現場"; }
-      else if(startM > nowSvc){
-        cls += " upcoming";
-        var diff = startM - nowSvc;
-        when = diff < 60 ? diff+" 分後" : Math.floor(diff/60)+" 小時後";
-      } else { cls += " past"; when = "已過"; }
+    var st = slotState(s), cls = "slot", when = "";
+    if(st === "off"){ cls += " past"; when = "今天不收"; }
+    else if(st === "now"){ cls += " upcoming"; when = "車在現場"; }
+    else if(st === "soon"){
+      cls += " upcoming";
+      var diff = minutes(s.a) - nowSvc;
+      when = diff < 60 ? diff+" 分後" : Math.floor(diff/60)+" 小時後";
     }
+    else if(st === "past"){ cls += " past"; when = "已過"; }
     span.className = cls;
     span.innerHTML = hhmm(s.a)+"–"+hhmm(s.e) + (when ? '<span class="when">'+when+"</span>" : "");
     return span;
@@ -1587,9 +1745,18 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     countEl.textContent = "右上角可搜尋街名；拖動地圖也會重算距離。";
     sheetBody.innerHTML = "";
 
+    var bar = filterBarEl();
+    if(bar) sheetBody.appendChild(bar);
+
+    // nearest 20 among the stops that still have a run today
+    var shown = [];
+    for(var i = 0; i < ranked.length && shown.length < 20; i++){
+      if(ranked[i].g._slots.length) shown.push(ranked[i]);
+    }
+
     var ol = document.createElement("ol");
     ol.className = "stops";
-    ranked.slice(0, 20).forEach(function(r){
+    shown.forEach(function(r){
       var g = r.g, d = fmtDist(r.m);
       var li = document.createElement("li");
       li.className = "stop" + (selected === g ? " sel" : (r.m < 500 ? " near" : ""));
@@ -1608,7 +1775,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
       body.appendChild(nm);
       var tw = document.createElement("div");
       tw.className = "times";
-      g.slots.forEach(function(s){ tw.appendChild(slotEl(s)); });
+      g._slots.forEach(function(s){ tw.appendChild(slotEl(s)); });
       body.appendChild(tw);
       li.appendChild(body);
 
@@ -1753,7 +1920,8 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     var districts = Object.create(null);
     groups.forEach(function(g){ districts[g.dist] = 1; });
     var items = [
-      "臺北市 <strong>" + Object.keys(districts).length + "</strong> 個行政區、<strong>" + groups.length + "</strong> 個收運點，來自你提供的點位資訊檔。"
+      "臺北市 <strong>" + Object.keys(districts).length + "</strong> 個行政區、<strong>" + groups.length + "</strong> 個收運點，來自你提供的點位資訊檔。",
+      "清單與地圖預設只顯示<strong>今天還沒來</strong>的班次，清單上方可切成顯示全部；時間每分鐘自己更新，不用重開。"
     ].concat(window.DATA_NOTES || []).concat([
       "原始檔<strong>沒有星期欄位</strong>，只能呈現時刻表，無法判斷特定日期是否收運，也分不出一般垃圾／資源回收／廚餘。",
       "時間超過 24:00 的班次視為隔天凌晨，例如原始資料的 <code>2411</code> 顯示為 00:11。",
@@ -2003,6 +2171,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
 
   /* ---------- boot ---------- */
   sizeLabelCanvas();
+  applyFilter();
   rank();
   buildStops();
   styleStops();
@@ -2010,6 +2179,16 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   syncRouteBtn();
   renderList();
   drawLabels();
+  scheduleTick();
+
+  // Phones freeze timers for pages in the background, so coming back to the app is
+  // the moment that actually has to re-check the clock — this is what removes the
+  // "have to reopen it" problem.
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden){ tick(); scheduleTick(); }
+  });
+  window.addEventListener("pageshow", function(){ tick(); scheduleTick(); });
+  window.addEventListener("focus", function(){ tick(); });
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(function(){
     widthCache = Object.create(null);
     drawLabels();
