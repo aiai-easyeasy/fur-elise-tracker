@@ -1154,15 +1154,61 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   function tok(n){ return css.getPropertyValue(n).trim(); }
 
   /* ---------- group rows that share a location ---------- */
+  // One physical stop often arrives as several rows: the same address written
+  // identically but with coordinates a few metres apart, because each route's row was
+  // geocoded separately. 通化街167號前 is one such case — 121.55385,25.0283 for the
+  // 22:24 run and 121.55387,25.02833 for the 19:05 run, 3.9 m apart. Keying on the
+  // coordinates split it into two half-empty points, so rows are clustered by name
+  // plus proximity instead.
+  //
+  // Same name but further apart than SAME_STOP_M is a wrong coordinate rather than a
+  // duplicate — 忠孝東路2段66號 appears twice 1.8 km apart, 大業路大興街口 260 m — and
+  // merging those would place the marker somewhere neither run stops at, so they are
+  // left as separate points. 120 m sits above every genuine duplicate in this data
+  // (largest: 港墘路221巷2號, three coordinates spanning 106 m) and well below those
+  // errors.
+  var SAME_STOP_M = 120;
+  var mergedStops = 0;                  // stops that came from more than one coordinate
+
   var groups = (function(){
-    var m = Object.create(null), out = [];
+    var byName = Object.create(null), out = [];
     window.STOPS.forEach(function(s){
-      var key = s.n + "|" + s.g.toFixed(5) + "|" + s.t.toFixed(5);
-      var g = m[key];
-      if(!g){ g = m[key] = { name:s.n, dist:s.d, vil:s.v, lng:s.g, lat:s.t, slots:[] }; out.push(g); }
+      var cells = byName[s.n] || (byName[s.n] = []);
+      var g = null;
+      for(var k = 0; k < cells.length; k++){
+        if(haversine(cells[k].lat, cells[k].lng, s.t, s.g) <= SAME_STOP_M){ g = cells[k]; break; }
+      }
+      if(!g){
+        g = { name:s.n, dist:s.d, vil:s.v, lng:s.g, lat:s.t, slots:[], pts:[] };
+        cells.push(g);
+        out.push(g);
+      }
+      s._g = g;                         // every row knows the stop it belongs to
+
+      var seen = false, i;
+      for(i = 0; i < g.pts.length; i++){
+        if(g.pts[i][0] === s.t && g.pts[i][1] === s.g){ seen = true; break; }
+      }
+      if(!seen) g.pts.push([s.t, s.g]);
+
+      // duplicated source rows exist (忠誠路2段207巷與東山路交叉口 is listed twice for the
+      // same route, car and time, differing only in 里 and coordinates) — one slot each
+      for(i = 0; i < g.slots.length; i++){
+        var q = g.slots[i];
+        if(q.a === s.a && q.e === s.e && q.route === s.r && q.car === s.c) return;
+      }
       g.slots.push({ a:s.a, e:s.e, route:s.r, car:s.c, plate:s.p, w:s.w });
     });
-    out.forEach(function(g){ g.slots.sort(function(x,y){ return x.a-y.a; }); });
+    out.forEach(function(g){
+      if(g.pts.length > 1){
+        mergedStops++;
+        var la = 0, ln = 0;             // sit on the average of the reported coordinates
+        g.pts.forEach(function(p){ la += p[0]; ln += p[1]; });
+        g.lat = la / g.pts.length;
+        g.lng = ln / g.pts.length;
+      }
+      g.slots.sort(function(x,y){ return x.a-y.a; });
+    });
     return out;
   })();
 
@@ -1172,9 +1218,6 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     Object.keys(m).forEach(function(k){ m[k].sort(function(x,y){ return x.a-y.a; }); });
     return m;
   })();
-
-  var groupIndex = Object.create(null);
-  groups.forEach(function(g){ groupIndex[g.name+"|"+g.lng.toFixed(5)+"|"+g.lat.toFixed(5)] = g; });
 
   function routeKeys(g){
     var keys = [];
@@ -1205,10 +1248,11 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   }
   function routeSeq(k, days){
     var seq = routes[k] || [];
-    if(!days) return seq;
-    return seq.filter(function(st){
+    if(days) seq = seq.filter(function(st){
       return !st.w || st.w.some(function(d){ return days[d]; });
     });
+    // duplicated source rows put the same physical stop in the sequence twice in a row
+    return seq.filter(function(st, i){ return !i || st._g !== seq[i-1]._g; });
   }
   function daysLabel(days){
     return Object.keys(days).sort().map(function(d){ return "週" + DAY_NAME[d]; }).join("、");
@@ -1864,9 +1908,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
       head.appendChild(rsm);
       sec.appendChild(head);
 
-      var isCur = seq.map(function(s){
-        return s.n === g.name && Math.abs(s.g-g.lng) < 1e-6 && Math.abs(s.t-g.lat) < 1e-6;
-      });
+      var isCur = seq.map(function(s){ return s._g === g; });
 
       var ol = document.createElement("ol");
       ol.className = "rslist";
@@ -1900,10 +1942,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
           row.appendChild(w);
         }
         if(!cur){
-          row.addEventListener("click", function(){
-            var target = groupIndex[s.n+"|"+s.g.toFixed(5)+"|"+s.t.toFixed(5)];
-            if(target) select(target, true);
-          });
+          row.addEventListener("click", function(){ select(s._g, true); });
         }
         li.appendChild(row);
         ol.appendChild(li);
@@ -1929,7 +1968,11 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     var items = [
       "臺北市 <strong>" + Object.keys(districts).length + "</strong> 個行政區、<strong>" + groups.length + "</strong> 個收運點，來自你提供的點位資訊檔。",
       "清單與地圖預設只顯示<strong>今天還沒來</strong>的班次，清單上方可切成顯示全部；時間每分鐘自己更新，不用重開。"
-    ].concat(window.DATA_NOTES || []).concat([
+    ].concat(mergedStops ? [
+      "同一個地址在原始檔裡常被不同車次各自標一組座標，相差幾公尺到幾十公尺；相距 " + SAME_STOP_M +
+      " 公尺內的視為同一個點合併，共 <strong>" + mergedStops + "</strong> 個，位置取這些座標的平均。" +
+      "相距更遠的同名地址是座標有誤而不是重複，仍分開列出。"
+    ] : []).concat(window.DATA_NOTES || []).concat([
       "原始檔<strong>沒有星期欄位</strong>，只能呈現時刻表，無法判斷特定日期是否收運，也分不出一般垃圾／資源回收／廚餘。",
       "時間超過 24:00 的班次視為隔天凌晨，例如原始資料的 <code>2411</code> 顯示為 00:11。",
       "手機 GPS 市區誤差約 20–100 公尺，收運點常間隔不到 50 公尺，「最近的點」請當參考。",
