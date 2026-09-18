@@ -1653,6 +1653,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   // Runs that are over (or that don't run today) are dropped from the list and the
   // map by default; the bar above the list switches back to the whole timetable.
   var PAST_KEY = "gtmap.showPast";
+  var LIST_N = 20;                  // the list is always 「最近的 20 個點」
   var showPast = false;
   try{ showPast = localStorage.getItem(PAST_KEY) === "1"; }catch(e){}
   var hiding = false, hiddenCount = 0, allDone = false;
@@ -1671,18 +1672,25 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   }
 
   // g._slots = what to list for this stop right now; empty = the stop drops out.
+  // Needs the ranking, so it has to run after rank().
   function applyFilter(){
-    var left = 0;
     groups.forEach(function(g){
       g._slots = showPast ? g.slots : g.slots.filter(function(s){ return !isDone(s); });
-      if(g._slots.length) left++;
     });
-    // Late at night everything is over; hiding it all would leave an empty map and an
-    // empty list, so fall back to the full timetable and say why.
-    allDone = !showPast && left === 0;
-    hiding = !showPast && !allDone;
-    hiddenCount = hiding ? groups.length - left : 0;
+    hiding = !showPast;
+
+    // The count has to describe the list, so it is measured inside the same fixed
+    // window the list draws from — 「已隱藏 5 個」 then means exactly five rows fewer,
+    // instead of a number about stops the list was never going to show anyway.
+    var win = ranked.slice(0, LIST_N), live = 0;
+    win.forEach(function(r){ if(r.g._slots.length) live++; });
+
+    // Everything nearby already done: hiding would leave an empty list, so fall back
+    // to the whole timetable and say why.
+    allDone = hiding && win.length > 0 && live === 0;
+    if(allDone) hiding = false;
     if(!hiding) groups.forEach(function(g){ g._slots = g.slots; });
+    hiddenCount = hiding ? win.length - live : 0;
   }
 
   function setShowPast(v){
@@ -1700,7 +1708,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
 
     if(allDone){
       bar.className = "filterbar done";
-      txt.innerHTML = "今天的班次都跑完了，下面是<strong>明天</strong>的時刻。";
+      txt.innerHTML = "這附近今天的班次都跑完了，下面是<strong>明天</strong>的時刻。";
       bar.appendChild(txt);
       return bar;
     }
@@ -1748,11 +1756,10 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
     var bar = filterBarEl();
     if(bar) sheetBody.appendChild(bar);
 
-    // nearest 20 among the stops that still have a run today
+    // the nearest LIST_N stops, minus the ones with nothing left today — deliberately
+    // not backfilled from further away, so hiddenCount matches the rows that vanished
     var shown = [];
-    for(var i = 0; i < ranked.length && shown.length < 20; i++){
-      if(ranked[i].g._slots.length) shown.push(ranked[i]);
-    }
+    ranked.slice(0, LIST_N).forEach(function(r){ if(r.g._slots.length) shown.push(r); });
 
     var ol = document.createElement("ol");
     ol.className = "stops";
@@ -1965,6 +1972,7 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
   /* ---------- origin ---------- */
   function refresh(){
     rank();
+    applyFilter();        // the hidden count is measured over the nearest LIST_N, which just moved
     styleStops();
     drawMe();
     drawRoute();
@@ -2171,8 +2179,8 @@ window.STREETS={"o":[24.95,121.44],"s":100000,"cell":0.02,"w":{"-1:6":[[3,-189,1
 
   /* ---------- boot ---------- */
   sizeLabelCanvas();
-  applyFilter();
   rank();
+  applyFilter();
   buildStops();
   styleStops();
   drawMe();
