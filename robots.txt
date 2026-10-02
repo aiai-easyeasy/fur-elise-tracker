@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://aiai-easyeasy.github.io/fur-elise-tracker/sitemap.xml
